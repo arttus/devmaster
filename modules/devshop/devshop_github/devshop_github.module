@@ -478,7 +478,12 @@ function devshop_github_webhook($project_node) {
         foreach ($project->environments as $environment_name => $environment) {
 
           // Only pull if deploy is not disabled or if environment is tracking a tag.
-          if ($git_ref == $environment->git_ref && !$environment->settings->pull_disabled && !in_array($environment->git_ref, $project->settings->git['tags'])) {
+          if (
+            $environment->site_status == HOSTING_SITE_ENABLED &&
+            $git_ref == $environment->git_ref &&
+            !$environment->settings->pull_disabled &&
+            !in_array($environment->git_ref, $project->settings->git['tags'])
+          ) {
             $environments_to_pull[] = $environment->name;
 
 
@@ -505,8 +510,8 @@ function devshop_github_webhook($project_node) {
 
           // Determine environment branch.
           // @TODO: Make Configurable, allow branch names to be env name
-          //   $environment_name = "pr" . $data->pull_request->number;
-          $environment_name = 'branch_' . str_replace('-', '_', $branch);
+          $environment_name = "pr" . $data->pull_request->number;
+//          $environment_name = 'branch_' . str_replace('-', '_', $branch);
           $already_have_pr_info = FALSE;
 
           // When PR is opened... create new environment.

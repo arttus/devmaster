@@ -66,31 +66,6 @@ function devshop_provision_drush_command() {
     ),
     'aliases' => array('test'),
   );
-  // @TODO: Remove this once http://drupal.org/node/1995506 is committed
-  $items['devshop-install'] = array(
-    'description' => dt('Install and verify the DevShop frontend.'),
-    'bootstrap' => DRUSH_BOOTSTRAP_DRUSH,
-    'arguments' => array(
-      'example.com' => dt('The URL of the site to install, optional (default: %host).', array('%host' => devshop_fqdn())),
-    ),
-    'options' => array(
-     'http_service_type' => dt('Webserver type to configure (default: %webserver)', array('%webserver' => 'apache')),
-     'drush_make_version' => dt('Drush make version to install, if not present (default: %drush_make', array('%drush_make' => '6.x-2.3')),
-     'aegir_db_host' => dt('Database host to connect to (default: %host)', array('%host' => 'localhost')),
-     'aegir_db_user' => dt('Database user to connect as (default: %user)', array('%user' => 'root')),
-     'aegir_db_pass' => dt('Database password to use'),
-     'client_email' => dt('Email of the first client to create in the frontend'),
-     'client_name' => dt('Name of the first client to create in the frontend (default: %user)', array('%user' => 'admin')),
-     'aegir_host' => dt('Fully qualified domain name of the local server (default: %fqdn)', array('%fqdn' => devshop_fqdn())),
-     'script_user' => dt('User to run the backend as (default: %user)', array('%user' => devshop_current_user())),
-     'web_group' => dt('Group the webserver is running as (default: %group)', array('%group' => devshop_default_web_group())),
-     'version' => dt('The version of this released. (default: %version)', array('%version' => '1.x')),
-     'aegir_root' => dt('Install aegir in this home directory (default: %home). Do not change unless you know what you are doing.', array('%home' => drush_server_home())),
-     'makefile' => dt('The Drupal makefile to use to build the front end.'),
-     'profile' => dt('The Drupal installation profile to use for installing the front-end (default: hostmaster)'),
-     'working-copy' => dt('Keep VCS files when building the hostmaster platform using Drush make.')
-    ),
-  );
   return $items;
 }
 
@@ -262,7 +237,7 @@ function drush_devshop_provision_pre_updatedb() {
 /**
  * Run a Symfony Process saving to drush logs.
  */
-function devshop_drush_process($command, $cwd = null, $label = 'Process', $env = array(), $log_output = TRUE) {
+function devshop_drush_process($command, $cwd = null, $label = 'Process', $env = array(), $log_output = TRUE, $error_message = 'Process Failed') {
   drush_log("[$label] $command", 'devshop_command');
 
   // Merge in env vars, inheriting the CLI's
@@ -297,7 +272,7 @@ function devshop_drush_process($command, $cwd = null, $label = 'Process', $env =
   }
   else {
     drush_log('', 'devshop_error');
-    drush_set_error('DEVSHOP_PROCESS_ERROR', dt('Process Failed'));
+    drush_set_error('DEVSHOP_PROCESS_ERROR', dt($error_message));
   }
   return $process->getOutput();
 }
@@ -452,62 +427,6 @@ function devshop_fqdn($host = NULL) {
   return strtolower(gethostbyaddr(gethostbyname($host)));
 }
 
-//
-//if (!function_exists('provision_autoload_register_prefix')) {
-//  /**
-//   * Register a PECL style prefix with the provision autoloader.
-//   *
-//   * @param string $prefix
-//   *   The class prefix to register.
-//   * @param string $dir
-//   *   The directory to search for the classes in.
-//   * @param bool $prepend
-//   *   If the directory should be searched first for the classes in the given
-//   *   prefix, set this to TRUE, otherwise, the default, FALSE, is fine.
-//   */
-//  function provision_autoload_register_prefix($prefix, $dir, $prepend = FALSE) {
-//
-//    // Get any current directories set for this prefix.
-//    $current_prefixes = provision_autoload()->getPrefixes();
-//    if (isset($current_prefixes[$prefix])) {
-//      $dirs = $current_prefixes[$prefix];
-//    }
-//    else {
-//      $dirs = array();
-//    }
-//
-//    // Now add the new one.
-//    if ($prepend) {
-//      array_unshift($dirs, $dir);
-//    }
-//    else {
-//      array_push($dirs, $dir);
-//    }
-//
-//    // Set the prefixes.
-//    provision_autoload()->addPrefix($prefix, $dirs);
-//  }
-//}
-//
-//if (!function_exists('provision_autoload')) {
-//  /**
-//   * Return an instance of the provision autoloader.
-//   *
-//   * This will instiatate an instance if it needs to.
-//   */
-//  function provision_autoload() {
-//    static $instance = NULL;
-//
-//    if (is_null($instance)) {
-//      $instance = new ClassLoader();
-//      // Activate the autoloader.
-//      $instance->register();
-//    }
-//
-//    return $instance;
-//  }
-//}
-
 /**
  * implementation of provision_verify
  */
@@ -517,5 +436,92 @@ function drush_devshop_provision_pre_provision_verify() {
     $drush_aliases->write();
 
     drush_log(dt('Project Drush aliases written.'), 'devshop_log');
+  }
+}
+
+/**
+ * Implementation of drush_hook_post_provision_install()
+ *
+ * This function handles all of the alternative environment install methods.
+ */
+function drush_devshop_provision_post_provision_install() {
+
+  // Install Method: Clone
+  // Sync from a drush alias.
+  drush_log('Installing environment with method: ' . d()->environment_settings['install_method']['method'] , 'devshop_log');
+  if (d()->environment_settings['install_method']['method'] == 'clone') {
+    drush_log(dt('Environment Clone initiated...'), 'devshop_log');
+    $clone_source = d()->environment_settings['install_method']['clone_source'];
+
+    // If "clone_source" is set to "_other", use the drush alias in "clone_source_drush".
+    if ($clone_source == '_other') {
+      $source = d()->environment_settings['install_method']['clone_source_drush'];
+    }
+    elseif (!empty($clone_source)) {
+      $source = d()->environment_settings['install_method']['clone_source'];
+    }
+    else {
+      return drush_set_error('DEVSHOP_ERROR', dt('Install_method"clone_source" was not set.'));
+    }
+
+    $destination = d()->name;
+    $command = "drush provision-sync $source $destination --database --files --update-uri --disable-rollback-backup --updatedb --cache-clear --registry-rebuild";
+    devshop_drush_process($command, NULL, 'Cloning site from ' . d($source)->uri);
+    devshop_drush_process('drush cc drush', NULL, 'Clearing drush caches');
+//    devshop_drush_process_cache_clear($destination);
+  }
+
+  // Install Method: import
+  elseif (d()->environment_settings['install_method']['method'] == 'import') {
+
+
+    // If import source is a mysql URL:
+    $path_or_url = d()->environment_settings['install_method']['import'];
+    $url = parse_url($path_or_url);
+    if ($url['scheme'] == 'mysql') {
+
+      // Dump the file
+      $temp_file_name = tempnam('/tmp', 'devshop_remote_db.sql.');
+      $db_name = ltrim($url['path'], '/');
+      $command = "mysqldump -u{$url['user']} -p{$url['pass']} -h{$url['host']} {$db_name}  --result-file={$temp_file_name}";
+      devshop_drush_process($command, NULL, dt('Saving database file...'));
+
+      $file_to_import = $temp_file_name;
+    }
+
+    // If file exists but is not readable, alert the user.
+    elseif (file_exists($path_or_url) && !is_readable($path_or_url)){
+      return drush_set_error('DEVSHOP_IMPORT_ERROR', dt('Unable to import SQL file @path: not readable.'));
+    }
+
+    // If file exists and is readable, set it as the file to import.
+    elseif (file_exists($path_or_url) && is_readable($path_or_url)){
+      $file_to_import = $path_or_url;
+    }
+
+    // Import the file
+    $alias = d()->name;
+    $command = "drush {$alias} sqlq 'SOURCE {$file_to_import}'";
+    devshop_drush_process($command, NULL, dt('Importing database file...'));
+    devshop_drush_process('drush cc drush', NULL, 'Clearing drush caches');
+    devshop_drush_process_cache_clear($alias);
+    devshop_drush_process("drush {$alias} sqlq 'SHOW TABLES'", NULL, dt('Show Tables'));
+  }
+}
+
+/**
+ * Runs drush cache-clear or drush cache-rebuild on the chosen alias.
+ *
+ * @param $alias
+ *   A drush alias.
+ */
+function devshop_drush_process_cache_clear($alias) {
+
+  // Clear all caches.
+  if (drush_drupal_major_version(d()->root) == 8) {
+    devshop_drush_process("drush {$alias} cache-rebuild", NULL, dt('Clear all Caches'));
+  }
+  else {
+    devshop_drush_process("drush {$alias} cache-clear all", NULL, dt('Clear all Caches'));
   }
 }

@@ -36,6 +36,10 @@ function boots_preprocess_environment(&$vars) {
   // Available deploy data targets.
   $vars['target_environments'] = $project->environments;
 
+  // Get token for task links
+  global $user;
+  $vars['token'] = drupal_get_token($user->uid);
+
   // Load git refs and create links
   $vars['git_refs'] = array();
   foreach ($project->settings->git['refs'] as $ref => $type) {
@@ -99,9 +103,9 @@ function boots_preprocess_environment(&$vars) {
   }
 
   // Load Task Links
-  $environment->task_links = devshop_environment_links($environment);
-  $environment->task_links_rendered = theme("item_list", array(
-    'items' => $environment->task_links,
+  $environment->menu = devshop_environment_menu($environment);
+  $environment->menu_rendered = theme("item_list", array(
+    'items' => $environment->menu,
     'attributes' => array(
       'class' => array('dropdown-menu dropdown-menu-right'),
       )
@@ -158,12 +162,130 @@ function boots_preprocess_environment(&$vars) {
   // No hooks configured.
   if (isset($project->settings->deploy) && $project->settings->deploy['allow_environment_deploy_config'] && $environment->site_status == HOSTING_SITE_ENABLED && isset($environment->settings->deploy) && count(array_filter($environment->settings->deploy)) == 0) {
     $vars['warnings'][] = array(
-      'text' => t('No deploy hooks are configured. Check your !link.', array(
-        '!link' => l(t('Environment Settings'), "node/{$project->nid}/edit/{$environment->nid}"),
+      'text' => t('No deploy hooks are configured. Check !link.', array(
+        '!link' => l(t('Environment Settings'), "node/{$environment->site}/edit"),
       )),
       'type' => 'warning',
     );
   }
+
+  // Determine Environment State. Only one of these may be active at a time.
+  // State: Site install failed.
+  if (current($environment->tasks['install'])->task_status == HOSTING_TASK_ERROR) {
+    $install_task = current($environment->tasks['install']);
+    $buttons = l(
+      '<i class="fa fa-refresh"></i> ' . t('Retry'),
+      "node/{$install_task->nid}",
+      array(
+        'html' => TRUE,
+        'attributes' => array(
+          'class' => array('btn btn-sm text-success'),
+        ),
+      )
+    );
+    $buttons .= l(
+      '<i class="fa fa-trash"></i> ' . t('Destroy'),
+      "hosting_confirm/{$environment->site}/site_delete",
+      array(
+        'html' => TRUE,
+        'attributes' => array(
+          'class' => array('btn btn-sm text-danger'),
+        ),
+        'query' => array(
+          'token' => $vars['token'],
+        ),
+      )
+    );
+    $vars['warnings'][] = array(
+      'text' => t('Installation failed. The site is not available.'),
+      'buttons' => $buttons,
+      'type' => 'error',
+    );
+  }
+
+  // State: Site Install Queued or processing.
+  elseif (!empty($environment->tasks['install']) && (current($environment->tasks['install'])->task_status == HOSTING_TASK_QUEUED || current($environment->tasks['install'])->task_status == HOSTING_TASK_PROCESSING)) {
+
+    $vars['warnings'][] = array(
+      'text' => t('Environment install in progress!'),
+      'type' => 'info',
+      'icon' => 'truck',
+    );
+  }
+
+  // State: Environment Disable Initiated
+  elseif (!empty($environment->tasks['disable']) && (current($environment->tasks['disable'])->task_status == HOSTING_TASK_QUEUED || current($environment->tasks['disable'])->task_status == HOSTING_TASK_PROCESSING)) {
+
+    $vars['warnings'][] = array(
+      'text' => t('Environment is being disabled.'),
+      'type' => 'info',
+    );
+  }
+
+  // State: Site Delete initiated.
+  elseif (!empty($environment->tasks['delete'])) {
+    foreach ($environment->tasks['delete'] as $task) {
+      if ($environment->site == $task->rid) {
+        $site_delete_task = $task;
+        $site_delete_status = l($site_delete_task->status_name, "node/{$site_delete_task->nid}");
+      }
+      elseif ($environment->platform == $task->rid) {
+        $platform_delete_task = $task;
+        $platform_delete_status = l($platform_delete_task->status_name, "node/{$platform_delete_task->nid}");
+      }
+    }
+
+    if (isset($site_delete_task)) {
+      $vars['warnings'][] = array(
+        'text' => t('Site Destroy') . ': ' . $site_delete_status,
+        'type' => 'warning',
+      );
+    }
+    if (isset($platform_delete_task)) {
+      $vars['warnings'][] = array(
+        'text' => t('Platform Destroy') . ': ' . $platform_delete_status,
+        'type' => 'warning',
+      );
+    }
+  }
+
+  // State: Site is Disabled
+  elseif ($environment->site_status == HOSTING_SITE_DISABLED) {
+    $buttons = '';
+    $buttons .= l(
+      '<i class="fa fa-power-off"></i> ' . t('Enable'),
+      "hosting_confirm/{$environment->site}/site_enable",
+      array(
+        'html' => TRUE,
+        'attributes' => array(
+          'class' => array('btn btn-sm text-success'),
+        ),
+        'query' => array(
+          'token' => $vars['token'],
+        ),
+      )
+    );
+    $buttons .= l(
+      '<i class="fa fa-trash"></i> ' . t('Destroy'),
+      "hosting_confirm/{$environment->site}/site_delete",
+      array(
+        'html' => TRUE,
+        'attributes' => array(
+          'class' => array('btn btn-sm text-danger'),
+        ),
+        'query' => array(
+          'token' => $vars['token'],
+        ),
+      )
+    );
+
+    $vars['warnings']['disabled'] = array(
+      'text' => t('Environment is disabled.'),
+      'type' => 'info',
+      'buttons' => $buttons,
+    );
+  }
+
   if (isset($environment->warnings)) {
     foreach ($environment->warnings as $warning) {
       $vars['warnings'][] = array(
@@ -176,9 +298,6 @@ function boots_preprocess_environment(&$vars) {
   // Load user into a variable.
   global $user;
   $vars['user'] = $user;
-
-  // Get token for task links
-  $vars['token'] = drupal_get_token($user->uid);
   $vars['environment'] = $environment;
 
   // Detect hooks.yml file.
@@ -505,17 +624,6 @@ function boots_preprocess_page(&$vars){
     if (isset($node->project)) {
       if ($node->type == 'project') {
         $project_node = $node;
-
-        // On "fork" or "clone", look for source arg.
-        if (arg(2) == 'project_devshop-create' && is_numeric(arg(4))) {
-          $environment_node = node_load(arg(4));
-          $title2text = $environment_node->environment->name;
-          $title2url = 'node/' . $environment_node->environment->site;
-        }
-        elseif (arg(2) == 'project_devshop-create') {
-          $title2text = t('New');
-          $title2url = current_path();
-        }
       }
       else {
         $project_node = node_load($node->project->nid);
@@ -535,6 +643,17 @@ function boots_preprocess_page(&$vars){
         '#prefix' => '<h4>',
         '#suffix' => '</h4>',
       );
+    }
+  }
+
+  // Set title on create environment page.
+  if (arg(0) == 'node' && arg(2) == 'site' && !empty(arg(3))) {
+
+    // Look for project. If there is none, return.
+    $project_node = devshop_projects_load_by_name(arg(3));
+    if ($project_node->type == 'project') {
+      $vars['title'] = l($project_node->title, "node/$project_node->nid");
+      $vars['subtitle'] = t('Project');
     }
   }
 
@@ -663,7 +782,7 @@ function boots_preprocess_node_project(&$vars){
   }
 
   if ($project->settings->deploy['method'] == 'queue') {
-    $vars['queued_ago'] = hosting_format_interval(variable_get('hosting_queue_deploy_last_run', FALSE));
+    $vars['queued_ago'] = hosting_format_interval(variable_get('hosting_queue_pull_last_run', FALSE));
   }
 
   // Webhook status output.
@@ -812,52 +931,6 @@ function boots_menu_local_tasks(&$variables) {
   }
 
   return $output;
-}
-
-
-
-/**
- * Implements hook_form_FORM_ID_alter() for node_site_form
- *
- * "Environment" Settings form.
- */
-function boots_form_site_node_form_alter(&$form, &$form_state, $form_id) {
-
-  // Alter form for better UX
-
-  // Project Settings Vertical Tabs
-  $form['environment_settings'] = array(
-    '#type' => 'vertical_tabs',
-    '#weight' => -11,
-  );
-
-  $form['environment']['settings']['#title'] = t('General Settings');
-  $form['environment']['settings']['#group'] = 'environment_settings';
-  $form['environment']['settings']['#weight'] = -100;
-  $form['environment']['settings']['deploy']['#group'] = 'environment_settings';
-  $form['hosting_backup_queue']['#group'] = 'environment_settings';
-  $form['http_basic_auth']['#group'] = 'environment_settings';
-  $form['hosting_logs']['#group'] = 'environment_settings';
-
-  $form['aliases_wrapper']['#group'] = 'environment_settings';
-  $form['aliases_wrapper']['#title'] = t('Domain Names');
-  $form['aliases_wrapper']['#prefix'] = '';
-  $form['aliases_wrapper']['#suffix'] = '';
-
-  $form['environment']['settings']['client'] = $form['client'];
-  unset($form['client']);
-
-  $form['hosting_ssl_wrapper']['#group'] = 'environment_settings';
-  $form['hosting_ssl_wrapper']['#title'] = t('SSL');
-  $form['hosting_ssl_wrapper']['#prefix'] = '';
-  $form['hosting_ssl_wrapper']['#suffix'] = '';
-
-  // Help Text
-  if (!empty($form['#node']->nid)) {
-    $form['#prefix'] = '<h3>' . t('Environment Settings') . ' <small>' . $form['#node']->environment->name . '</small></h3>';
-  }
-
-  unset($form['path']);
 }
 
 /**
