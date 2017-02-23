@@ -2,7 +2,9 @@ default:
   suites:
     default:
       contexts:
-        - FeatureContext
+        - FeatureContext:
+            project: qa
+            environment: dev
         - Drupal\DrupalExtension\Context\DrupalContext
         - Drupal\DrupalExtension\Context\MinkContext
         - Drupal\DrupalExtension\Context\MessageContext

@@ -1,12 +1,30 @@
-Feature: Enironment Settings: General
-In order to change General Settings of the Environment
+@api
+Feature: Change General Settings of the Environment
+In order to change General Settings of the Environment of a project
 As an administrator
 I need to submit the form
-@api
-  Scenario: Lock database settings
+  Background:
     Given I am logged in as a user with the "administrator" role
-    When I am at "project/qa"
-    Then I click "Environment Settings"
-    And I check "Lock Database"
+    And I am at project site
+  
+  Scenario Outline: Lock database setting
+    Given I click "Environment Settings"
+    Given I <check> "<field>"
     When I press the "Save" button
-    Then I should see "Environment settings saved for dev in project qa"
+    Then I should see "created in project"
+
+    Examples:
+    |check|field|
+    |check|Lock Database|
+    |uncheck|Lock Database|
+    |check|Disable Deploy on Commit|
+    |uncheck|Disable Deploy on Commit|
+
+  Scenario Outline: Change client
+    Given I fill in "Client" with "admin"
+    When I press the "Save" button
+    Then I should see "created in project"
+
+    Examples:
+    |project|environment|
+    |qa|dev|

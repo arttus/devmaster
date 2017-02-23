@@ -12,16 +12,21 @@ use Behat\Gherkin\Node\TableNode;
  */
 class FeatureContext extends RawDrupalContext implements SnippetAcceptingContext {
     private $output;
+    public $project;
+    public $environment;
 
-    public function __construct()
+    public function __construct($project, $environment)
     {
+        $this->project = $project;
+        $this->environment = $environment;
         
     }
     /**
-     * @Then the database is locked
+     * @Given I am at project site
      */
-    public function lockDatabase()
+    public function iAmAtProjectSite()
     {
-        print 'Lock Database';
+        $this->visitPath("project/".$this->project);
     }
+
 }
