@@ -6,9 +6,9 @@ I need to submit the form
   Background:
     Given I am logged in as a user with the "administrator" role
     And I am at project site
+    And I click "Environment Settings"
   
   Scenario Outline: Lock database setting
-    Given I click "Environment Settings"
     Given I <check> "<field>"
     When I press the "Save" button
     Then I should see "created in project"
@@ -20,11 +20,7 @@ I need to submit the form
     |check|Disable Deploy on Commit|
     |uncheck|Disable Deploy on Commit|
 
-  Scenario Outline: Change client
+  Scenario: Change client
     Given I fill in "Client" with "admin"
     When I press the "Save" button
     Then I should see "created in project"
-
-    Examples:
-    |project|environment|
-    |qa|dev|
