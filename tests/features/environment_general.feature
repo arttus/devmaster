@@ -1,4 +1,4 @@
-@api
+@api @general @environment
 Feature: Change General Settings of the Environment
 In order to change General Settings of the Environment of a project
 As an administrator

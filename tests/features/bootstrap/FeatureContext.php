@@ -28,5 +28,26 @@ class FeatureContext extends RawDrupalContext implements SnippetAcceptingContext
     {
         $this->visitPath("project/".$this->project);
     }
+    /* Click some text
+    *
+    * @When I click on the text :arg1
+    */
+    public function iClickOnTheText($arg1)
+    {
+        $session = $this->getSession();
+        $element = $session->getPage()->find(
+            'xpath',
+            $session->getSelectorsHandler()->selectorToXpath('xpath', '*//*[text()="'. $arg1 .'"]')
+        );
+        if (null === $element) {
+            throw new \InvalidArgumentException(sprintf('Cannot find text: "%s"', $arg1));
+        }
+ 
+        $element->click();
+ 
+    }
+
+    
+
 
 }
