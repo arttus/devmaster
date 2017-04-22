@@ -5,8 +5,11 @@
     <div class="environment-dropdowns">
 
       <!-- Information Modal -->
-      <a type="button" class="environment-meta-data environment-info btn btn-text btn-sm" title="<?php print t('Connect') ?>" data-toggle="modal" data-target="#infoModal<?php print $environment->site ?>">
-        <?php print t('Connect') ?>
+      <a type="button" class="environment-meta-data environment-info btn btn-text btn-sm" title="<?php print t('Environment Information') ?>" data-toggle="modal" data-target="#infoModal<?php print $environment->site ?>">
+          <i class="fa fa-info-circle fa-2x"></i>
+          <span class="sr-only">
+            <?php print t('Environment Information') ?>
+          </span>
       </a>
 
       <!-- Modal -->
@@ -71,9 +74,15 @@
               </section>
               <section>
                 <label>
-                  Path
+                  Repository Path
                 </label>
-                <?php print $environment->repo_root; ?>
+                <?php print $environment->repo_path; ?>
+              </section>
+              <section>
+                <label>
+                  Publish Path
+                </label>
+                <?php print $environment->publish_path; ?>
               </section>
             </div>
             <div class="modal-body">
@@ -396,11 +405,12 @@
   <!-- Environment Info -->
     <div class="list-group-item environment-info">
         <label>
-          <?php print t('Created'); ?> <time class="timeago" datetime="<?php print date('c', $environment->created) ?>"><?php print format_date($environment->created); ?></time>
+          <?php print t('Created'); ?>
         </label>
-      <label>
-        <?php print $environment->install_method_label; ?>
-      </label>
+        <span class="content">
+            <time class="timeago" datetime="<?php print date('c', $environment->created) ?>"><?php print format_date($environment->created); ?></time>
+            <?php print $environment->install_method_label; ?>
+        </span>
     </div>
     <?php
       // SITUATION: Environment is Active!
@@ -657,7 +667,7 @@ sites/all/drush/drushrc.php
                     </a>
                     <?php endif; ?>
                   </div>
-                  <?php print t('Below is the current git status of the codebase at <code>@path</code>', array('@path' => $environment->repo_root)); ?>
+                  <?php print t('Below is the current git status of the codebase at <code>@path</code>', array('@path' => $environment->repo_path)); ?>
                 </div>
 
                 <?php print theme('devshop_ascii', array('output' => $environment->git_commit)); ?>

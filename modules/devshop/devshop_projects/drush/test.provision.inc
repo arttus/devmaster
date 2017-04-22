@@ -50,12 +50,15 @@ function drush_devshop_provision_provision_test() {
   }
   elseif ($type == 'behat') {
     // Get paths from options or site context.
-    $repo_path = $environment->repo_root;
+    $repo_path = !empty(d()->platform->repo_path)?
+      d()->platform->repo_path:
+      d()->platform->publish_path
+    ;
     $behat_folder_path = drush_get_option('behat-folder-path', $project->settings['testing']['behat_folder_path']);
 
     // If no repo at that path, error.
     if (!file_exists($repo_path)){
-      return drush_set_error('DEVSHOP_MISSING_FILE', dt('repo_root does not exist.'));
+      return drush_set_error('DEVSHOP_MISSING_FILE', dt('repo_path does not exist.'));
     }
     // If no file at behat bin path, error.
     $tests_folder = $repo_path  . '/' .$behat_folder_path;
@@ -172,7 +175,7 @@ YML;
       // The extra profile is used so we can dynamically set the URL and drush alias of the behat.yml.
       // the "colors" option is to force it to output ANSI colors. "format-settings" "expand: true" is so
       // Behat will output all of the steps when using "Scenario Outlines".
-      $cmd = "$full_behat_bin_path $feature_path --config $behat_yml_file --profile $environment_name --colors --format-settings='{\"expand\": true}'";
+      $cmd = "$full_behat_bin_path $feature_path --config $behat_yml_file --profile $environment_name --colors --strict --format-settings='{\"expand\": true}'";
 
       // Run behat command
       devshop_drush_process($cmd, $full_behat_folder_path, 'DevShop Testing', array(), TRUE, 'Test Run Failed');
